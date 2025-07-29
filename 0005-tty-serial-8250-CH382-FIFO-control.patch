@@ -1,0 +1,83 @@
+From 126e163143b41c1c1948eca422dddb306f9dccd7 Mon Sep 17 00:00:00 2001
+From: Kyle Bader <kyle.bader94@gmail.com>
+Date: Sun, 13 Jul 2025 16:44:13 -0600
+Subject: [PATCH 5/6] tty/serial/8250 - CH382 FIFO control
+
+    * Uses existing 16C750 logic for CH382 but modifies the fifo size as per ch382 spec.
+---
+ drivers/tty/serial/8250/8250_fifo.c |  3 +++
+ drivers/tty/serial/8250/8250_pci.c  |  2 +-
+ drivers/tty/serial/8250/8250_port.c | 15 +++++++++++++++
+ include/uapi/linux/serial_core.h    |  3 +++
+ 4 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/tty/serial/8250/8250_fifo.c b/drivers/tty/serial/8250/8250_fifo.c
+index c55e649eb0eb..961589d54822 100644
+--- a/drivers/tty/serial/8250/8250_fifo.c
++++ b/drivers/tty/serial/8250/8250_fifo.c
+@@ -136,6 +136,9 @@ int serial8250_dispatch_set_fifo_control(struct uart_port *port,
+ 		return -EOPNOTSUPP;
+ 
+ 	switch (port->type) {
++		case PORT_CH38X:
++			return port_16750_set_fifo_control(up, ctl);
++
+ 		case PORT_16750:
+ 			return port_16750_set_fifo_control(up, ctl);
+ 
+diff --git a/drivers/tty/serial/8250/8250_pci.c b/drivers/tty/serial/8250/8250_pci.c
+index 73c200127b08..346c0c89d511 100644
+--- a/drivers/tty/serial/8250/8250_pci.c
++++ b/drivers/tty/serial/8250/8250_pci.c
+@@ -1926,7 +1926,7 @@ pci_wch_ch38x_setup(struct serial_private *priv,
+ 		return serial_8250_warn_need_ioport(priv->dev);
+ 
+ 	port->port.flags |= UPF_FIXED_TYPE;
+-	port->port.type = PORT_16850;
++	port->port.type = PORT_CH38X;
+ 	return pci_default_setup(priv, board, port, idx);
+ }
+ 
+diff --git a/drivers/tty/serial/8250/8250_port.c b/drivers/tty/serial/8250/8250_port.c
+index 7654b3cedc2a..21cccdcad8f6 100644
+--- a/drivers/tty/serial/8250/8250_port.c
++++ b/drivers/tty/serial/8250/8250_port.c
+@@ -126,6 +126,21 @@ const struct serial8250_config serial8250_uart_config[] = {
+ 			.tx_trigger_bytes = 32,			
+ 		}
+ 	},
++	[PORT_CH38X] = {
++		.name		= "CH382",
++		.fifo_size	= 256,
++		.tx_loadsz	= 256,
++		.fcr		= UART_FCR_ENABLE_FIFO | UART_FCR_R_TRIG_10 |
++				  UART_FCR7_64BYTE,
++		.flags		= UART_CAP_FIFO | UART_CAP_EFR | UART_CAP_SLEEP,
++		.rxtrig_bytes			= {1, 4, 8, 14, 1, 32, 128, 224},
++		.flags		= UART_CAP_FIFO | UART_CAP_SLEEP | UART_CAP_AFE,  
++		.fifo_control = {
++			.flags 			  = UART_FIFO_CTRL_FLAG_ENABLE_RX | 
++							  	UART_FIFO_CTRL_FLAG_ENABLE_TX  ,
++			.rx_trigger_bytes = 128,		
++		}
++	},
+ 	[PORT_STARTECH] = {
+ 		.name		= "Startech",
+ 		.fifo_size	= 1,
+diff --git a/include/uapi/linux/serial_core.h b/include/uapi/linux/serial_core.h
+index 9c007a106330..86431b96f9f8 100644
+--- a/include/uapi/linux/serial_core.h
++++ b/include/uapi/linux/serial_core.h
+@@ -231,6 +231,9 @@
+ /* Sunplus UART */
+ #define PORT_SUNPLUS	123
+ 
++/* CH382 UART */
++#define PORT_CH38X       124
++
+ /* Generic type identifier for ports which type is not important to userspace. */
+ #define PORT_GENERIC	(-1)
+ 
+-- 
+2.48.1
+
